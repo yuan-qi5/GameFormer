@@ -3,18 +3,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
+# sine-cosine positional encoding :
+# input : (batch_szie, seq_len, d_model)
+# output : x + position encoding 
+# max_len : 支持编码的最大序列长度
 class PositionalEncoding(nn.Module):
     def __init__(self, max_len=100):
         super(PositionalEncoding, self).__init__()
-        d_model = 256
+        d_model = 256  # 隐藏层维度，表示每个 token 会映射到 256 维的向量空间
         dropout = 0.1
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        position = torch.arange(max_len).unsqueeze(1) # (max_len, 1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)) # size(d_model/2,)
+
+# 用 torch.exp() 计算方便 GPI 向量化加速计算
+                
         pe = torch.zeros(max_len, 1, d_model)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
         pe[:, 0, 1::2] = torch.cos(position * div_term)
-        pe = pe.permute(1, 0, 2)
+        pe = pe.permute(1, 0, 2)  # 调整为 (1, max_len, d_model)
         self.register_parameter('pe', nn.Parameter(pe, requires_grad=False))
         self.dropout = nn.Dropout(p=dropout)
 
