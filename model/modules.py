@@ -29,15 +29,15 @@ class PositionalEncoding(nn.Module):
         
         return self.dropout(x)
     
-
+# 编码 agent 的运动历史和历史信息并进行融合
 class AgentEncoder(nn.Module):
     def __init__(self):
         super(AgentEncoder, self).__init__()
         self.motion = nn.LSTM(8, 256, 2, batch_first=True)
-        self.type_emb = nn.Embedding(4, 256, padding_idx=0)
+        self.type_emb = nn.Embedding(4, 256, padding_idx=0) # padding_idx 表示填充值，不进行训练
 
     def forward(self, inputs):
-        traj, _ = self.motion(inputs[:, :, :8])
+        traj, _ = self.motion(inputs[:, :, :8])  # 输出 h_N 与 记忆细胞
         output = traj[:, -1]
         type = self.type_emb(inputs[:, -1, 8].int())
         output = output + type
