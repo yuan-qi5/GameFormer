@@ -44,7 +44,7 @@ class AgentEncoder(nn.Module):
 
         return output
     
-
+# 返回维度为 256 的车道特征
 class LaneEncoder(nn.Module):
     def __init__(self):
         super(LaneEncoder, self).__init__()
@@ -77,15 +77,16 @@ class LaneEncoder(nn.Module):
         interpolating = self.interpolating(inputs[..., 14].int()) 
         stop_sign = self.stop_sign(inputs[..., 15].int())
 
+        # 离散属性相加后再与连续属性拼接
         lane_attr = self_type + left_type + right_type + traffic_light + interpolating + stop_sign
         lane_embedding = torch.cat([self_line, left_line, right_line, speed_limit, lane_attr], dim=-1)
-    
+
         # process
         output = self.position_encode(self.pointnet(lane_embedding))
 
         return output
     
-
+# 点级 MLP，用于将形如 (x, y, z) 的 3 维点属性编码为 256 维特征
 class CrosswalkEncoder(nn.Module):
     def __init__(self):
         super(CrosswalkEncoder, self).__init__()
@@ -96,7 +97,7 @@ class CrosswalkEncoder(nn.Module):
 
         return output
     
-
+# 把当前状态与未来轨迹融合，提取出带速度、加速度、航向等时序特征，输出形状为 (x, y, heading, vx, vy, w, h)
 class FutureEncoder(nn.Module):
     def __init__(self):
         super(FutureEncoder, self).__init__()
@@ -125,7 +126,7 @@ class FutureEncoder(nn.Module):
 
         return output
 
-
+# 预测每个时间步高斯参数 res : (B, M, future_len, 4) 以及每条模式的分数 score : (B, M) 
 class GMMPredictor(nn.Module):
     def __init__(self, future_len):
         super(GMMPredictor, self).__init__()
@@ -145,6 +146,7 @@ class SelfTransformer(nn.Module):
     def __init__(self):
         super(SelfTransformer, self).__init__()
         heads, dim, dropout = 8, 256, 0.1
+        # batch_first ：决定输入/输出张量的维度顺序 (seq_len, batch_size, embed_dim) 还是 (batch_size, seq_len, embed_dim)
         self.self_attention = nn.MultiheadAttention(dim, heads, dropout, batch_first=True)
         self.norm_1 = nn.LayerNorm(dim)
         self.norm_2 = nn.LayerNorm(dim)
@@ -169,12 +171,12 @@ class CrossTransformer(nn.Module):
 
     def forward(self, query, key, value, mask=None):
         attention_output, _ = self.cross_attention(query, key, value, key_padding_mask=mask)
-        attention_output = self.norm_1(attention_output)
+        attention_output = self.norm_1(attention_output) # 正则化时未加残差
         output = self.norm_2(self.ffn(attention_output) + attention_output)
 
         return output
 
-
+# 输出自注意 query，和预测的绝对坐标轨迹以及得分
 class InitialDecoder(nn.Module):
     def __init__(self, modalities, neighbors, future_len):
         super(InitialDecoder, self).__init__()
@@ -198,7 +200,7 @@ class InitialDecoder(nn.Module):
         query_content = self.query_encoder(query, encoding, encoding, mask)
         predictions, scores = self.predictor(query_content)
 
-        # post process
+        # post process  # 相对坐标变为绝对坐标
         predictions[..., :2] += current_state[:, None, None, :2]
 
         return query_content, predictions, scores
@@ -209,9 +211,10 @@ class InteractionDecoder(nn.Module):
         super(InteractionDecoder, self).__init__()
         self.interaction_encoder = SelfTransformer()
         self.query_encoder = CrossTransformer()
-        self.future_encoder = future_encoder
+        self.future_encoder = future_encoder  # 未来编码器
         self.decoder = GMMPredictor(future_len)
 
+    # actors : 上一级生成的 M 条候选轨迹，每条 T 步 (x,y)
     def forward(self, id, current_states, actors, scores, last_content, encoding, mask):
         B, N, M, T, _ = actors.shape
         
