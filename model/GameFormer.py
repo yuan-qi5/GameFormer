@@ -7,7 +7,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         heads, dim, dropout = 8, 256, 0.1
         self._neighbors = neighbors_to_predict
-        self.agent_encoder = AgentEncoder()
+        self.agent_encoder = AgentEncoder()  # why 所有其他 agent 用同一个编码器而不分类型？
         self.ego_encoder = AgentEncoder()
         self.lane_encoder = LaneEncoder()
         self.crosswalk_encoder = CrosswalkEncoder()
