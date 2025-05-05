@@ -17,14 +17,16 @@ class Encoder(nn.Module):
 
     def segment_map(self, map, map_encoding):
         stride = 10
+        # N_e : 元素数量（edge count） N_p : 每条元素上采样的点数  D : 特征维度
         B, N_e, N_p, D = map_encoding.shape
 
-        # segment map
+        # segment map  对 N_p channel 进行池化再重排为 (B, N_e * N_p // stride , D)
         map_encoding = F.max_pool2d(map_encoding.permute(0, 3, 1, 2), kernel_size=(1, stride))
         map_encoding = map_encoding.permute(0, 2, 3, 1).reshape(B, -1, D)
 
-        # segment mask
-        map_mask = torch.eq(map, 0)[:, :, :, 0].reshape(B, N_e, N_p//stride, N_p//(N_p//stride))
+        # segment mask  输出 mask (B, N_e * N_p // stride)
+        # 由于 map_encoding 进行 (1, stride) 最大池化，mask 时逐段考虑 
+        map_mask = torch.eq(map, 0)[:, :, :, 0].reshape(B, N_e, N_p//stride, stride)
         map_mask = torch.max(map_mask, dim=-1)[0].reshape(B, -1)
 
         return map_encoding, map_mask
@@ -45,7 +47,8 @@ class Encoder(nn.Module):
         encoded_map_lanes = self.lane_encoder(map_lanes)
         encoded_map_crosswalks = self.crosswalk_encoder(map_crosswalks)
 
-        # attention fusion
+        # attention fusion ：对每一个要预测的 actor (包括 ego 和各邻居)，
+        # 都单独构造一个 “融合上下文” 的编码
         encodings = []
         masks = []
         N = self._neighbors + 1
